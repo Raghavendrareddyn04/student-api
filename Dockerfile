@@ -1,21 +1,27 @@
-# Use Node.js 14 as the base image
-FROM node:14.21.3
-
-# Set the working directory
+# ---------- build stage ----------
+FROM node:18-alpine AS build
 WORKDIR /app
 
-# Copy package.json and package-lock.json
 COPY package*.json ./
+# Install ALL deps (incl. dev) to build
+RUN npm ci
 
-# Install dependencies
-RUN npm install -g @angular/cli@11.2.18 && \
-    npm install
-
-# Copy the rest of the application
 COPY . .
+# Build NestJS app (Nx)
+RUN npm run student-build
 
-# Expose the port the app runs on
+# ---------- runtime stage ----------
+FROM node:18-alpine AS runtime
+WORKDIR /app
+
+ENV NODE_ENV=production
+ENV PORT=3000
+ENV NODE_OPTIONS=--max-old-space-size=256
+
+# Only copy built artifacts and prod deps
+COPY --from=build /app/dist ./dist
+COPY package*.json ./
+RUN npm ci --only=production
+
 EXPOSE 3000
-
-# Command to run the application
-CMD ["npm", "run", "start:usersbe"]
+CMD ["node","dist/apps/student-api/main.js"]
